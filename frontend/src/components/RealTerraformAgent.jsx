@@ -1,6 +1,6 @@
-// RealTerraformAgent.jsx - Complete File
+// RealTerraformAgent.jsx - Complete File with Template Download
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Bot, User, Shield, Code, Terminal, CheckCircle, AlertTriangle, Info, ExternalLink, Copy, Check } from 'lucide-react';
+import { Send, Loader2, Bot, User, Shield, Code, Terminal, CheckCircle, AlertTriangle, Info, ExternalLink, Copy, Check, Download } from 'lucide-react';
 
 // API URL - auto-detects localhost or uses environment variable
 const API_URL = window.location.hostname === 'localhost' 
@@ -56,14 +56,24 @@ export default function RealTerraformAgent() {
     setShowOnboardingModal(true);
   };
 
-const getCloudFormationUrl = () => {
-  // ✅ FIXED: Simplified GitHub raw URL (AWS CloudFormation needs simple format)
-  const templateUrl = encodeURIComponent(
-    `https://raw.githubusercontent.com/PraveenaMaliipeddi/terraform-ai-agent-real/main/terraform-ai-role.yaml`
-  );
-  const stackName = 'TerraformAI-Access';
-  return `https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?templateURL=${templateUrl}&stackName=${stackName}&param_ExternalId=${externalId}&param_TerraformAIAccountId=${TERRAFORM_AI_ACCOUNT_ID}`;
-};
+  const getCloudFormationUrl = () => {
+    // Opens CloudFormation create stack page (user will upload template)
+    const region = 'us-east-1';
+    return `https://console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/create`;
+  };
+
+  const downloadTemplate = () => {
+    // Download the CloudFormation template from GitHub
+    const templateUrl = 'https://raw.githubusercontent.com/PraveenaMaliipeddi/terraform-ai-agent-real/main/terraform-ai-role.yaml';
+    const link = document.createElement('a');
+    link.href = templateUrl;
+    link.download = 'terraform-ai-role.yaml';
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
@@ -483,26 +493,26 @@ const getCloudFormationUrl = () => {
                   <ol className="text-sm text-blue-300 space-y-2">
                     <li className="flex gap-3">
                       <span className="text-blue-400 font-bold">1.</span>
-                      <span>Click button below to open AWS CloudFormation</span>
+                      <span>Download the CloudFormation template</span>
                     </li>
                     <li className="flex gap-3">
                       <span className="text-blue-400 font-bold">2.</span>
-                      <span>CloudFormation creates a secure IAM Role (30 seconds)</span>
+                      <span>Open AWS CloudFormation console</span>
                     </li>
                     <li className="flex gap-3">
                       <span className="text-blue-400 font-bold">3.</span>
-                      <span>Copy the Role ARN and paste it back here</span>
+                      <span>Upload the template and fill in the External ID</span>
                     </li>
                     <li className="flex gap-3">
                       <span className="text-blue-400 font-bold">4.</span>
-                      <span>Done! Start creating infrastructure</span>
+                      <span>Copy the Role ARN and paste it back here</span>
                     </li>
                   </ol>
                 </div>
 
                 <div className="bg-slate-950 rounded-xl p-4 border border-slate-800">
                   <p className="text-sm text-slate-300 mb-3">
-                    <strong className="text-white">Your External ID:</strong> (used for security)
+                    <strong className="text-white">Your External ID:</strong> (copy this, you'll need it)
                   </p>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 bg-black/50 p-3 rounded text-xs text-purple-400 font-mono overflow-x-auto">
@@ -519,26 +529,41 @@ const getCloudFormationUrl = () => {
 
                 <div className="flex gap-3">
                   <button
+                    onClick={downloadTemplate}
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white rounded-xl py-4 font-semibold transition-all flex items-center justify-center gap-2 shadow-lg"
+                  >
+                    <Download className="w-5 h-5" />
+                    Download Template
+                  </button>
+                  <button
                     onClick={() => window.open(getCloudFormationUrl(), '_blank')}
                     className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl py-4 font-semibold transition-all flex items-center justify-center gap-2 shadow-lg"
                   >
                     <ExternalLink className="w-5 h-5" />
-                    Open AWS CloudFormation
+                    Open AWS Console
+                  </button>
+                </div>
+
+                <div className="bg-amber-950/30 border border-amber-800/30 rounded-xl p-4">
+                  <p className="text-xs text-amber-200">
+                    💡 <strong>In AWS Console:</strong> Choose "Upload a template file", select the downloaded file, paste your External ID in the parameters, and create the stack.
+                  </p>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setOnboardingStep(2)}
+                    className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl py-3 font-semibold transition-all"
+                  >
+                    I've Created the Stack →
                   </button>
                   <button
                     onClick={() => setShowOnboardingModal(false)}
-                    className="px-6 bg-slate-800 hover:bg-slate-700 text-white rounded-xl py-4 font-semibold transition-all border border-slate-700"
+                    className="px-6 bg-slate-800 hover:bg-slate-700 text-white rounded-xl py-3 font-semibold transition-all border border-slate-700"
                   >
                     Cancel
                   </button>
                 </div>
-
-                <button
-                  onClick={() => setOnboardingStep(2)}
-                  className="w-full text-center text-sm text-slate-400 hover:text-white transition-colors underline"
-                >
-                  Already created the role? Click here to enter ARN
-                </button>
               </div>
             )}
 
