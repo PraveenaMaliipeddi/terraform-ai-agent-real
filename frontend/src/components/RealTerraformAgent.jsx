@@ -56,16 +56,14 @@ export default function RealTerraformAgent() {
     setShowOnboardingModal(true);
   };
 
-  const getCloudFormationUrl = () => {
-    // TODO: After uploading terraform-ai-role.yaml to GitHub, update this URL
-    // Example: https://raw.githubusercontent.com/yourusername/terraform-ai-app/main/terraform-ai-role.yaml
-    const templateUrl = encodeURIComponent(
-      `https://raw.githubusercontent.com/YOUR_USERNAME/terraform-ai-app/main/terraform-ai-role.yaml`
-    );
-    const stackName = 'TerraformAI-Access';
-    return `https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?templateURL=${templateUrl}&stackName=${stackName}&param_ExternalId=${externalId}&param_TerraformAIAccountId=${TERRAFORM_AI_ACCOUNT_ID}`;
-  };
-
+ const getCloudFormationUrl = () => {
+  // ✅ FIXED: Using your actual GitHub repository
+  const templateUrl = encodeURIComponent(
+    `https://raw.githubusercontent.com/PraveenaMaliipeddi/terraform-ai-agent-real/refs/heads/main/terraform-ai-role.yaml`
+  );
+  const stackName = 'TerraformAI-Access';
+  return `https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?templateURL=${templateUrl}&stackName=${stackName}&param_ExternalId=${externalId}&param_TerraformAIAccountId=${TERRAFORM_AI_ACCOUNT_ID}`;
+};
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
