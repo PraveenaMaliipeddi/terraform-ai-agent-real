@@ -56,10 +56,10 @@ export default function RealTerraformAgent() {
     setShowOnboardingModal(true);
   };
 
- const getCloudFormationUrl = () => {
-  // ✅ FIXED: Using your actual GitHub repository
+const getCloudFormationUrl = () => {
+  // ✅ FIXED: Simplified GitHub raw URL (AWS CloudFormation needs simple format)
   const templateUrl = encodeURIComponent(
-    `https://raw.githubusercontent.com/PraveenaMaliipeddi/terraform-ai-agent-real/refs/heads/main/terraform-ai-role.yaml`
+    `https://raw.githubusercontent.com/PraveenaMaliipeddi/terraform-ai-agent-real/main/terraform-ai-role.yaml`
   );
   const stackName = 'TerraformAI-Access';
   return `https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?templateURL=${templateUrl}&stackName=${stackName}&param_ExternalId=${externalId}&param_TerraformAIAccountId=${TERRAFORM_AI_ACCOUNT_ID}`;
