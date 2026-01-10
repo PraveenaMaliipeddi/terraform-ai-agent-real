@@ -1,6 +1,6 @@
-// RealTerraformAgent.jsx - Complete File with Template Download
+// RealTerraformAgent.jsx - Option 1: Quick-create CloudFormation URL
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Bot, User, Shield, Code, Terminal, CheckCircle, AlertTriangle, Info, ExternalLink, Copy, Check, Download } from 'lucide-react';
+import { Send, Loader2, Bot, User, Shield, Code, Terminal, CheckCircle, AlertTriangle, Info, ExternalLink, Copy, Check } from 'lucide-react';
 
 // API URL - auto-detects localhost or uses environment variable
 const API_URL = window.location.hostname === 'localhost' 
@@ -25,7 +25,6 @@ export default function RealTerraformAgent() {
   const [pendingCreation, setPendingCreation] = useState(null);
   const messagesEndRef = useRef(null);
 
-  // TODO: REPLACE WITH YOUR AWS ACCOUNT ID (get from AWS Console top-right)
   const TERRAFORM_AI_ACCOUNT_ID = '639713290923';
 
   useEffect(() => {
@@ -57,21 +56,12 @@ export default function RealTerraformAgent() {
   };
 
   const getCloudFormationUrl = () => {
-    // Opens CloudFormation create stack page (user will upload template)
-    const region = 'us-east-1';
-    return `https://console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/create`;
-  };
-
-  const downloadTemplate = () => {
-    // Download the CloudFormation template from GitHub
+    // Direct quick-create link with pre-filled template
     const templateUrl = 'https://raw.githubusercontent.com/PraveenaMaliipeddi/terraform-ai-agent-real/main/terraform-ai-role.yaml';
-    const link = document.createElement('a');
-    link.href = templateUrl;
-    link.download = 'terraform-ai-role.yaml';
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const region = 'us-east-1';
+    const stackName = 'TerraformAI-Access';
+    
+    return `https://console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/quickcreate?templateURL=${templateUrl}&stackName=${stackName}&param_ExternalId=${externalId}&param_TerraformAIAccountId=${TERRAFORM_AI_ACCOUNT_ID}`;
   };
 
   const copyToClipboard = (text) => {
@@ -479,7 +469,7 @@ export default function RealTerraformAgent() {
               <Shield className="w-8 h-8 text-purple-400" />
               <div>
                 <h3 className="text-2xl font-bold text-white">Setup Secure AWS Connection</h3>
-                <p className="text-slate-400 text-sm mt-1">2-minute setup • Industry standard security</p>
+                <p className="text-slate-400 text-sm mt-1">One-time setup • 2 minutes</p>
               </div>
             </div>
 
@@ -493,26 +483,26 @@ export default function RealTerraformAgent() {
                   <ol className="text-sm text-blue-300 space-y-2">
                     <li className="flex gap-3">
                       <span className="text-blue-400 font-bold">1.</span>
-                      <span>Download the CloudFormation template</span>
+                      <span>Click button below to open AWS CloudFormation</span>
                     </li>
                     <li className="flex gap-3">
                       <span className="text-blue-400 font-bold">2.</span>
-                      <span>Open AWS CloudFormation console</span>
+                      <span>Review the pre-filled template and scroll to bottom</span>
                     </li>
                     <li className="flex gap-3">
                       <span className="text-blue-400 font-bold">3.</span>
-                      <span>Upload the template and fill in the External ID</span>
+                      <span>Check the IAM acknowledgment box and click "Create stack"</span>
                     </li>
                     <li className="flex gap-3">
                       <span className="text-blue-400 font-bold">4.</span>
-                      <span>Copy the Role ARN and paste it back here</span>
+                      <span>Wait 30 seconds, then copy the Role ARN from Outputs tab</span>
                     </li>
                   </ol>
                 </div>
 
                 <div className="bg-slate-950 rounded-xl p-4 border border-slate-800">
                   <p className="text-sm text-slate-300 mb-3">
-                    <strong className="text-white">Your External ID:</strong> (copy this, you'll need it)
+                    <strong className="text-white">Your External ID:</strong> (already pre-filled in AWS)
                   </p>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 bg-black/50 p-3 rounded text-xs text-purple-400 font-mono overflow-x-auto">
@@ -527,26 +517,17 @@ export default function RealTerraformAgent() {
                   </div>
                 </div>
 
-                <div className="flex gap-3">
-                  <button
-                    onClick={downloadTemplate}
-                    className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white rounded-xl py-4 font-semibold transition-all flex items-center justify-center gap-2 shadow-lg"
-                  >
-                    <Download className="w-5 h-5" />
-                    Download Template
-                  </button>
-                  <button
-                    onClick={() => window.open(getCloudFormationUrl(), '_blank')}
-                    className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl py-4 font-semibold transition-all flex items-center justify-center gap-2 shadow-lg"
-                  >
-                    <ExternalLink className="w-5 h-5" />
-                    Open AWS Console
-                  </button>
-                </div>
+                <button
+                  onClick={() => window.open(getCloudFormationUrl(), '_blank')}
+                  className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl py-4 font-semibold transition-all flex items-center justify-center gap-2 shadow-lg"
+                >
+                  <ExternalLink className="w-5 h-5" />
+                  Open AWS CloudFormation (Pre-filled)
+                </button>
 
                 <div className="bg-amber-950/30 border border-amber-800/30 rounded-xl p-4">
                   <p className="text-xs text-amber-200">
-                    💡 <strong>In AWS Console:</strong> Choose "Upload a template file", select the downloaded file, paste your External ID in the parameters, and create the stack.
+                    💡 <strong>In AWS:</strong> Everything is pre-filled! Just scroll to the bottom, check the IAM acknowledgment box, click "Create stack", wait 30 seconds, then go to Outputs tab to copy your Role ARN.
                   </p>
                 </div>
 
@@ -571,7 +552,7 @@ export default function RealTerraformAgent() {
               <div className="space-y-6">
                 <div className="bg-amber-950/30 border border-amber-800/30 rounded-xl p-5">
                   <p className="text-sm text-amber-200">
-                    After CloudFormation completes, go to the <strong>Outputs</strong> tab and copy the <strong>RoleArn</strong> value.
+                    After CloudFormation completes (status shows "CREATE_COMPLETE"), go to the <strong>Outputs</strong> tab and copy the <strong>RoleArn</strong> value.
                   </p>
                 </div>
 
