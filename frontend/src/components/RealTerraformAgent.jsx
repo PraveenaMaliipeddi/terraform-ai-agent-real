@@ -55,14 +55,14 @@ export default function RealTerraformAgent() {
     setShowOnboardingModal(true);
   };
 
-  const getCloudFormationUrl = () => {
-    // Direct quick-create link with pre-filled template
-    const templateUrl = 'https://raw.githubusercontent.com/PraveenaMaliipeddi/terraform-ai-agent-real/main/terraform-ai-role.yaml';
-    const region = 'us-east-1';
-    const stackName = 'TerraformAI-Access';
-    
-    return `https://console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/quickcreate?templateURL=${templateUrl}&stackName=${stackName}&param_ExternalId=${externalId}&param_TerraformAIAccountId=${TERRAFORM_AI_ACCOUNT_ID}`;
-  };
+const getCloudFormationUrl = () => {
+  // S3-hosted template URL (AWS accepts this!)
+  const templateUrl = 'https://terraform-ai-templates-praveena.s3.amazonaws.com/terraform-ai-role.yaml';
+  const region = 'us-east-1';
+  const stackName = 'TerraformAI-Access';
+  
+  return `https://console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/quickcreate?templateURL=${templateUrl}&stackName=${stackName}&param_ExternalId=${externalId}&param_TerraformAIAccountId=${TERRAFORM_AI_ACCOUNT_ID}`;
+};
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
