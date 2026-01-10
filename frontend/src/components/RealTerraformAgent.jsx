@@ -5,7 +5,7 @@ import { Send, Loader2, Bot, User, Shield, Code, Terminal, CheckCircle, AlertTri
 // API URL - auto-detects localhost or uses environment variable
 const API_URL = window.location.hostname === 'localhost' 
   ? 'http://localhost:3001' 
-  : (import.meta.env.VITE_API_URL || '');
+  : 'https://terraform-ai-agent-real.onrender.com'; 
 
 export default function RealTerraformAgent() {
   const [userConnection, setUserConnection] = useState(null);
