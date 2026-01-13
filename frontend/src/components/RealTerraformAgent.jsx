@@ -1,11 +1,11 @@
-// RealTerraformAgent.jsx - Option 1: Quick-create CloudFormation URL
+// RealTerraformAgent.jsx - Complete Working Version
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Loader2, Bot, User, Shield, Code, Terminal, CheckCircle, AlertTriangle, Info, ExternalLink, Copy, Check } from 'lucide-react';
 
 // API URL - auto-detects localhost or uses environment variable
 const API_URL = window.location.hostname === 'localhost' 
   ? 'http://localhost:3001' 
-  : 'https://terraform-ai-agent-real.onrender.com'; 
+  : 'https://terraform-ai-agent-real.onrender.com';
 
 export default function RealTerraformAgent() {
   const [userConnection, setUserConnection] = useState(null);
@@ -55,13 +55,13 @@ export default function RealTerraformAgent() {
     setShowOnboardingModal(true);
   };
 
-const getCloudFormationUrl = () => {
-  // S3-hosted template URL (AWS accepts this!)
-  const templateUrl = 'https://terraform-ai-cloudformation-templates.s3.amazonaws.com/terraform-ai-role.yaml';
-  const stackName = 'TerraformAI-Access';
-  
-  return `https://console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/quickcreate?templateURL=${templateUrl}&stackName=${stackName}&param_ExternalId=${externalId}&param_TerraformAIAccountId=${TERRAFORM_AI_ACCOUNT_ID}`;
-};
+  const getCloudFormationUrl = () => {
+    const templateUrl = 'https://terraform-ai-cloudformation-templates.s3.amazonaws.com/terraform-ai-role.yaml';
+    const region = 'us-east-1';
+    const stackName = 'TerraformAI-Access';
+    
+    return `https://console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/quickcreate?templateURL=${templateUrl}&stackName=${stackName}&param_ExternalId=${externalId}&param_TerraformAIAccountId=${TERRAFORM_AI_ACCOUNT_ID}`;
+  };
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
