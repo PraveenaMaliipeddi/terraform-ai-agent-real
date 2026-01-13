@@ -57,8 +57,7 @@ export default function RealTerraformAgent() {
 
 const getCloudFormationUrl = () => {
   // S3-hosted template URL (AWS accepts this!)
-  const templateUrl = 'https://terraform-ai-templates-praveena.s3.amazonaws.com/terraform-ai-role.yaml';
-  const region = 'us-east-1';
+  const templateUrl = 'https://aws-ai-helper-agent-site-1767144697.s3.amazonaws.com/terraform-ai-role.yaml';
   const stackName = 'TerraformAI-Access';
   
   return `https://console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/quickcreate?templateURL=${templateUrl}&stackName=${stackName}&param_ExternalId=${externalId}&param_TerraformAIAccountId=${TERRAFORM_AI_ACCOUNT_ID}`;
