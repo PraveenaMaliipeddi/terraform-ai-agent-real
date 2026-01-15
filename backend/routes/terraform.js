@@ -81,7 +81,6 @@ router.post('/chat', async (req, res) => {
       word => lowerMessage.includes(word)
     );
 
-    // If not a creation request, just answer the question
     if (!isCreationRequest) {
       const answer = await generateAnswer(message);
       return res.json({
@@ -90,7 +89,6 @@ router.post('/chat', async (req, res) => {
       });
     }
 
-    // Creation request - need AWS connection
     if (!roleArn || !externalId) {
       return res.status(401).json({
         error: 'AWS connection required',
@@ -98,7 +96,6 @@ router.post('/chat', async (req, res) => {
       });
     }
 
-    // Verify we can assume the role
     try {
       await assumeRole(roleArn, externalId);
     } catch (error) {
@@ -108,7 +105,6 @@ router.post('/chat', async (req, res) => {
       });
     }
 
-    // Generate plan
     const result = await generateTerraformPlan(message);
     
     const actionId = `action_${Date.now()}`;
@@ -145,7 +141,7 @@ router.post('/chat', async (req, res) => {
   }
 });
 
-// Apply endpoint - ACTUALLY CREATES RESOURCES
+// Apply endpoint
 router.post('/apply', async (req, res) => {
   try {
     const { actionId, roleArn, externalId } = req.body;
@@ -167,10 +163,8 @@ router.post('/apply', async (req, res) => {
     console.log('🚀 Executing action:', actionId);
     console.log('📦 Resource type:', pendingAction.resourceType);
 
-    // Get credentials by assuming role
     const credentials = await assumeRole(roleArn, externalId);
 
-    // ACTUALLY CREATE THE RESOURCE
     const result = await createAWSResource(
       pendingAction.resourceType,
       pendingAction.resourceConfig,
@@ -189,6 +183,16 @@ router.post('/apply', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Apply error:', error);
+    
+    if (error.message === 'PERMISSION_UPDATE_REQUIRED') {
+      return res.status(403).json({
+        success: false,
+        error: 'Permission update required',
+        message: 'PERMISSION_UPDATE_REQUIRED',
+        needsPermissionUpdate: true
+      });
+    }
+    
     res.status(500).json({
       success: false,
       error: 'Failed to create resources',
@@ -196,10 +200,6 @@ router.post('/apply', async (req, res) => {
     });
   }
 });
-
-// ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
 
 async function assumeRole(roleArn, externalId) {
   const sts = new AWS.STS({
@@ -334,7 +334,6 @@ Plan: 3 to add, 0 to change, 0 to destroy.`,
     };
   }
 
-  // Default
   return {
     resourceType: 'unknown',
     resourceConfig: {},
@@ -347,7 +346,6 @@ Plan: 3 to add, 0 to change, 0 to destroy.`,
   };
 }
 
-// ACTUALLY CREATE AWS RESOURCES USING AWS SDK
 async function createAWSResource(resourceType, config, credentials) {
   console.log('🔨 Creating resource:', resourceType);
   
@@ -367,18 +365,14 @@ async function createS3Bucket(config, credentials) {
   });
 
   try {
-    // Create bucket
     console.log('📦 Creating S3 bucket:', config.bucketName);
     
-    const createParams = {
+    await s3.createBucket({
       Bucket: config.bucketName,
       ObjectOwnership: 'BucketOwnerEnforced'
-    };
-
-    await s3.createBucket(createParams).promise();
+    }).promise();
     console.log('✅ Bucket created');
 
-    // Enable versioning
     console.log('🔄 Enabling versioning...');
     await s3.putBucketVersioning({
       Bucket: config.bucketName,
@@ -388,7 +382,6 @@ async function createS3Bucket(config, credentials) {
     }).promise();
     console.log('✅ Versioning enabled');
 
-    // Enable encryption
     console.log('🔒 Enabling encryption...');
     await s3.putBucketEncryption({
       Bucket: config.bucketName,
@@ -402,7 +395,6 @@ async function createS3Bucket(config, credentials) {
     }).promise();
     console.log('✅ Encryption enabled');
 
-    // Add tags
     console.log('🏷️ Adding tags...');
     await s3.putBucketTagging({
       Bucket: config.bucketName,
@@ -421,7 +413,7 @@ async function createS3Bucket(config, credentials) {
 
     return {
       resourceId: config.bucketName,
-      message: `✅ Successfully created S3 bucket!\n\n📦 Bucket Name: ${config.bucketName}\n🔗 View in Console: ${bucketUrl}\n\n✨ Features enabled:\n• Versioning\n• Server-side encryption (AES256)\n• Management tags\n\n💡 Your bucket is ready to use!`,
+      message: `✅ Successfully created S3 bucket!\n\n📦 Bucket: ${config.bucketName}\n🔗 Console: ${bucketUrl}\n\n✨ Features:\n• Versioning enabled\n• AES256 encryption\n• Management tags`,
       outputs: {
         bucket_name: config.bucketName,
         bucket_region: 'us-east-1',
@@ -434,12 +426,20 @@ async function createS3Bucket(config, credentials) {
   } catch (error) {
     console.error('❌ S3 creation failed:', error);
     
+    if (error.code === 'AccessDenied' || error.message.includes('not authorized')) {
+      if (error.message.includes('PutEncryptionConfiguration') || 
+          error.message.includes('PutBucketVersioning') ||
+          error.message.includes('PutBucketTagging')) {
+        throw new Error('PERMISSION_UPDATE_REQUIRED');
+      }
+    }
+    
     if (error.code === 'BucketAlreadyExists') {
-      throw new Error(`Bucket name "${config.bucketName}" is already taken globally. S3 bucket names must be unique across all AWS accounts.`);
+      throw new Error(`Bucket "${config.bucketName}" already exists globally. Try again for a new unique name.`);
     }
     
     if (error.code === 'InvalidBucketName') {
-      throw new Error(`Invalid bucket name "${config.bucketName}". Bucket names must be 3-63 characters, lowercase, and contain only letters, numbers, and hyphens.`);
+      throw new Error(`Invalid bucket name. Must be 3-63 lowercase characters.`);
     }
     
     throw new Error(`Failed to create S3 bucket: ${error.message}`);
