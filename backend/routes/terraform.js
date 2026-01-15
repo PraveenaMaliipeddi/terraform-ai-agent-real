@@ -17,6 +17,8 @@ router.post('/auth/verify-role', async (req, res) => {
       });
     }
 
+    console.log('🔐 Verifying role:', roleArn);
+
     const sts = new AWS.STS({
       accessKeyId: process.env.AWS_ACCESS_KEY_ID,
       secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
@@ -40,6 +42,8 @@ router.post('/auth/verify-role', async (req, res) => {
 
     const identity = await tempSts.getCallerIdentity().promise();
 
+    console.log('✅ Role verified for account:', identity.Account);
+
     res.json({
       valid: true,
       accountId: identity.Account,
@@ -47,7 +51,7 @@ router.post('/auth/verify-role', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Role verification failed:', error);
+    console.error('❌ Role verification failed:', error);
     
     let errorMessage = 'Failed to assume role';
     if (error.code === 'AccessDenied') {
@@ -70,11 +74,14 @@ router.post('/chat', async (req, res) => {
       return res.status(400).json({ error: 'Message is required' });
     }
 
+    console.log('💬 Chat message:', message);
+
     const lowerMessage = message.toLowerCase();
     const isCreationRequest = ['create', 'deploy', 'setup', 'build', 'launch', 'make', 'provision'].some(
       word => lowerMessage.includes(word)
     );
 
+    // If not a creation request, just answer the question
     if (!isCreationRequest) {
       const answer = await generateAnswer(message);
       return res.json({
@@ -83,6 +90,7 @@ router.post('/chat', async (req, res) => {
       });
     }
 
+    // Creation request - need AWS connection
     if (!roleArn || !externalId) {
       return res.status(401).json({
         error: 'AWS connection required',
@@ -90,19 +98,32 @@ router.post('/chat', async (req, res) => {
       });
     }
 
-    const credentials = await assumeRole(roleArn, externalId);
-    const result = await generateTerraformPlan(message, credentials);
+    // Verify we can assume the role
+    try {
+      await assumeRole(roleArn, externalId);
+    } catch (error) {
+      return res.status(401).json({
+        error: 'Failed to assume role',
+        message: error.message
+      });
+    }
+
+    // Generate plan
+    const result = await generateTerraformPlan(message);
     
     const actionId = `action_${Date.now()}`;
     pendingActions.set(actionId, {
       message,
       roleArn,
       externalId,
-      terraformCode: result.terraformCode,
+      resourceType: result.resourceType,
+      resourceConfig: result.resourceConfig,
       timestamp: Date.now()
     });
 
     cleanupOldActions();
+
+    console.log('📋 Generated plan for action:', actionId);
 
     return res.json({
       requiresConfirmation: true,
@@ -116,7 +137,7 @@ router.post('/chat', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Chat error:', error);
+    console.error('❌ Chat error:', error);
     res.status(500).json({
       error: 'Failed to process request',
       message: error.message
@@ -124,7 +145,7 @@ router.post('/chat', async (req, res) => {
   }
 });
 
-// Apply endpoint
+// Apply endpoint - ACTUALLY CREATES RESOURCES
 router.post('/apply', async (req, res) => {
   try {
     const { actionId, roleArn, externalId } = req.body;
@@ -143,19 +164,31 @@ router.post('/apply', async (req, res) => {
       });
     }
 
+    console.log('🚀 Executing action:', actionId);
+    console.log('📦 Resource type:', pendingAction.resourceType);
+
+    // Get credentials by assuming role
     const credentials = await assumeRole(roleArn, externalId);
-    const result = await executeTerraform(pendingAction.terraformCode, credentials);
+
+    // ACTUALLY CREATE THE RESOURCE
+    const result = await createAWSResource(
+      pendingAction.resourceType,
+      pendingAction.resourceConfig,
+      credentials
+    );
 
     pendingActions.delete(actionId);
 
+    console.log('✅ Resource created:', result.resourceId);
+
     res.json({
-      success: result.success,
+      success: true,
       message: result.message,
       outputs: result.outputs
     });
 
   } catch (error) {
-    console.error('Apply error:', error);
+    console.error('❌ Apply error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to create resources',
@@ -163,6 +196,10 @@ router.post('/apply', async (req, res) => {
     });
   }
 });
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
 
 async function assumeRole(roleArn, externalId) {
   const sts = new AWS.STS({
@@ -212,13 +249,15 @@ async function generateAnswer(question) {
   return 'I can help with AWS and Terraform! Ask about S3, EC2, Lambda, VPC, pricing, or tell me what infrastructure to create.';
 }
 
-async function generateTerraformPlan(request, credentials) {
+async function generateTerraformPlan(request) {
   const lowerRequest = request.toLowerCase();
   
   if (lowerRequest.includes('s3') && lowerRequest.includes('bucket')) {
     const bucketName = `terraform-ai-${Date.now()}`;
     
     return {
+      resourceType: 's3-bucket',
+      resourceConfig: { bucketName },
       summary: `I'll create an S3 bucket in your AWS account with the following features:`,
       terraformCode: `terraform {
   required_providers {
@@ -262,15 +301,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "main" {
   }
 }
 
-resource "aws_s3_bucket_public_access_block" "main" {
-  bucket = aws_s3_bucket.main.id
-
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
 output "bucket_name" {
   value = aws_s3_bucket.main.id
 }
@@ -285,110 +315,135 @@ output "bucket_arn" {
       + bucket                      = "${bucketName}"
       + bucket_domain_name          = (known after apply)
       + region                      = "us-east-1"
-      + tags                        = {
-          + "CreatedAt"   = "${new Date().toISOString()}"
-          + "Environment" = "Development"
-          + "ManagedBy"   = "TerraformAI"
-          + "Name"        = "Terraform AI Bucket"
-        }
     }
 
-  # aws_s3_bucket_versioning.main will be created
-  # aws_s3_bucket_server_side_encryption_configuration.main will be created
-  # aws_s3_bucket_public_access_block.main will be created
-
-Plan: 4 to add, 0 to change, 0 to destroy.`,
+Plan: 3 to add, 0 to change, 0 to destroy.`,
       resources: [
         'S3 Bucket with versioning enabled',
-        'Server-side encryption (AES256) - security best practice',
-        'Public access block - prevents accidental public exposure',
-        'Resource tags for cost tracking and management'
+        'Server-side encryption (AES256)',
+        'Resource tags for management'
       ],
-      estimatedCost: '$0.023/month for 1GB storage ($0.276/year). FREE for first 12 months under AWS Free Tier (5GB free)',
+      estimatedCost: '$0.023/month for 1GB storage. FREE for first 12 months (5GB free)',
       warnings: [
-        '💰 BILLING: You will be charged by AWS starting immediately after creation',
-        '🌍 UNIQUE NAME: S3 bucket names must be globally unique across ALL AWS accounts',
-        '🗑️ DELETION: You must delete all objects inside bucket before deleting the bucket itself',
-        '💵 DATA TRANSFER: Uploading is free, but downloading data costs $0.09/GB after 100GB/month',
-        '⏰ ONGOING COST: This resource costs money every month it exists, even if unused',
-        '🔄 TO DELETE: Run "terraform destroy" or delete manually in AWS Console when done',
-        '📊 RECOMMENDED: Set up AWS Budget alerts to monitor spending'
+        '💰 You will be charged by AWS starting immediately',
+        '🌍 Bucket name must be globally unique',
+        '🗑️ Delete all objects before deleting bucket',
+        '💵 Data transfer costs $0.09/GB after 100GB/month',
+        '🔄 Run "terraform destroy" when done'
       ]
     };
   }
 
-  // EC2 example
-  if (lowerRequest.includes('ec2') || lowerRequest.includes('instance')) {
-    return {
-      summary: 'EC2 instances are more expensive than S3. Here\'s what you need to know:',
-      terraformCode: '# EC2 Terraform code would go here',
-      plan: '# EC2 instance plan',
-      resources: [
-        'EC2 t3.micro instance (1 vCPU, 1GB RAM)',
-        'Security group with SSH access',
-        'EBS volume (8GB)'
-      ],
-      estimatedCost: '$7.30/month ($87.60/year). FREE for first 12 months (750 hours/month of t2.micro)',
-      warnings: [
-        '💰 EXPENSIVE: EC2 costs $7-$500+/month depending on instance type',
-        '⏰ ALWAYS RUNNING: You are charged every hour the instance is running',
-        '🛑 STOP TO SAVE: Stop (don\'t terminate) the instance when not using to save money',
-        '📊 MONITOR: Check AWS Cost Explorer daily to avoid surprise bills',
-        '💵 HIDDEN COSTS: EBS storage ($0.10/GB/month) and data transfer also cost money',
-        '🔴 CRITICAL: Forgetting to stop instances can cost hundreds of dollars!'
-      ]
-    };
-  }
-
-  // Lambda example
-  if (lowerRequest.includes('lambda') || lowerRequest.includes('function')) {
-    return {
-      summary: 'Lambda is very cost-effective for most use cases:',
-      terraformCode: '# Lambda Terraform code would go here',
-      plan: '# Lambda function plan',
-      resources: [
-        'Lambda function with 128MB memory',
-        'IAM execution role',
-        'CloudWatch log group'
-      ],
-      estimatedCost: '$0.20/month for 1 million requests. First 1 million requests FREE every month (permanent free tier)',
-      warnings: [
-        '✅ COST-EFFECTIVE: Lambda is usually very cheap (often free under 1M requests)',
-        '💰 PRICING: $0.20 per 1M requests + $0.0000166667 per GB-second',
-        '🎁 FREE TIER: 1M requests + 400,000 GB-seconds free FOREVER (not just 12 months)',
-        '⚠️ WATCH OUT: High-memory or long-running functions can get expensive',
-        '📊 EXAMPLE: 1M requests at 1 second each with 128MB = ~$0.20/month',
-        '🔄 TO DELETE: Delete function and IAM role to stop all charges'
-      ]
-    };
-  }
-
-  // Default response
+  // Default
   return {
-    summary: 'Please specify what AWS resource you want to create. Examples:',
-    terraformCode: '# Tell me what to create:\n# - "Create an S3 bucket"\n# - "Create an EC2 instance"\n# - "Deploy a Lambda function"\n# - "Set up a DynamoDB table"',
-    plan: 'No plan generated yet. Please specify the AWS resource you need.',
+    resourceType: 'unknown',
+    resourceConfig: {},
+    summary: 'Please specify what AWS resource you want to create.',
+    terraformCode: '# Specify resource type',
+    plan: 'No plan available',
     resources: [],
-    estimatedCost: 'Depends on the resource type you choose',
-    warnings: [
-      '💡 TIP: Start with S3 buckets - they\'re the cheapest AWS resource (~$0.023/month)',
-      '⚠️ WARNING: Always check AWS pricing calculator before creating expensive resources',
-      '🎓 LEARNING: Use AWS Free Tier to learn without spending money (12 months free)',
-      '📊 MONITORING: Set up AWS Budget alerts to get notified before spending too much'
-    ]
+    estimatedCost: 'Unknown',
+    warnings: ['Specify a valid resource type']
   };
 }
 
-async function executeTerraform(terraformCode, credentials) {
-  return {
-    success: true,
-    message: '✅ Resources created successfully in your AWS account!\n\nView them in the AWS Console.',
-    outputs: {
-      bucket_name: `terraform-ai-${Date.now()}`,
-      bucket_region: 'us-east-1',
-      created_at: new Date().toISOString()
+// ACTUALLY CREATE AWS RESOURCES USING AWS SDK
+async function createAWSResource(resourceType, config, credentials) {
+  console.log('🔨 Creating resource:', resourceType);
+  
+  if (resourceType === 's3-bucket') {
+    return await createS3Bucket(config, credentials);
+  }
+  
+  throw new Error(`Unsupported resource type: ${resourceType}`);
+}
+
+async function createS3Bucket(config, credentials) {
+  const s3 = new AWS.S3({
+    accessKeyId: credentials.accessKeyId,
+    secretAccessKey: credentials.secretAccessKey,
+    sessionToken: credentials.sessionToken,
+    region: 'us-east-1'
+  });
+
+  try {
+    // Create bucket
+    console.log('📦 Creating S3 bucket:', config.bucketName);
+    
+    const createParams = {
+      Bucket: config.bucketName,
+      ObjectOwnership: 'BucketOwnerEnforced'
+    };
+
+    await s3.createBucket(createParams).promise();
+    console.log('✅ Bucket created');
+
+    // Enable versioning
+    console.log('🔄 Enabling versioning...');
+    await s3.putBucketVersioning({
+      Bucket: config.bucketName,
+      VersioningConfiguration: {
+        Status: 'Enabled'
+      }
+    }).promise();
+    console.log('✅ Versioning enabled');
+
+    // Enable encryption
+    console.log('🔒 Enabling encryption...');
+    await s3.putBucketEncryption({
+      Bucket: config.bucketName,
+      ServerSideEncryptionConfiguration: {
+        Rules: [{
+          ApplyServerSideEncryptionByDefault: {
+            SSEAlgorithm: 'AES256'
+          }
+        }]
+      }
+    }).promise();
+    console.log('✅ Encryption enabled');
+
+    // Add tags
+    console.log('🏷️ Adding tags...');
+    await s3.putBucketTagging({
+      Bucket: config.bucketName,
+      Tagging: {
+        TagSet: [
+          { Key: 'Name', Value: 'Terraform AI Bucket' },
+          { Key: 'Environment', Value: 'Development' },
+          { Key: 'ManagedBy', Value: 'TerraformAI' },
+          { Key: 'CreatedAt', Value: new Date().toISOString() }
+        ]
+      }
+    }).promise();
+    console.log('✅ Tags added');
+
+    const bucketUrl = `https://s3.console.aws.amazon.com/s3/buckets/${config.bucketName}`;
+
+    return {
+      resourceId: config.bucketName,
+      message: `✅ Successfully created S3 bucket!\n\n📦 Bucket Name: ${config.bucketName}\n🔗 View in Console: ${bucketUrl}\n\n✨ Features enabled:\n• Versioning\n• Server-side encryption (AES256)\n• Management tags\n\n💡 Your bucket is ready to use!`,
+      outputs: {
+        bucket_name: config.bucketName,
+        bucket_region: 'us-east-1',
+        bucket_arn: `arn:aws:s3:::${config.bucketName}`,
+        console_url: bucketUrl,
+        created_at: new Date().toISOString()
+      }
+    };
+
+  } catch (error) {
+    console.error('❌ S3 creation failed:', error);
+    
+    if (error.code === 'BucketAlreadyExists') {
+      throw new Error(`Bucket name "${config.bucketName}" is already taken globally. S3 bucket names must be unique across all AWS accounts.`);
     }
-  };
+    
+    if (error.code === 'InvalidBucketName') {
+      throw new Error(`Invalid bucket name "${config.bucketName}". Bucket names must be 3-63 characters, lowercase, and contain only letters, numbers, and hyphens.`);
+    }
+    
+    throw new Error(`Failed to create S3 bucket: ${error.message}`);
+  }
 }
 
 function cleanupOldActions() {
